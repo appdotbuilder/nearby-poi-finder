@@ -1,12 +1,33 @@
 
+import { db } from '../db';
+import { pointsOfInterestTable } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
 export const deletePOI = async (id: number): Promise<{ success: boolean }> => {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is deleting a point of interest from the database.
-    // It should:
-    // 1. Find the POI by ID
-    // 2. Either hard delete or soft delete (set is_active to false)
-    // 3. Return success status
-    // 4. Throw an error if POI is not found
-    
-    return Promise.resolve({ success: true });
+  try {
+    // Check if POI exists first
+    const existingPOI = await db.select()
+      .from(pointsOfInterestTable)
+      .where(eq(pointsOfInterestTable.id, id))
+      .execute();
+
+    if (existingPOI.length === 0) {
+      throw new Error(`Point of Interest with ID ${id} not found`);
+    }
+
+    // Soft delete - set is_active to false
+    const result = await db.update(pointsOfInterestTable)
+      .set({ 
+        is_active: false,
+        updated_at: new Date()
+      })
+      .where(eq(pointsOfInterestTable.id, id))
+      .returning()
+      .execute();
+
+    return { success: result.length > 0 };
+  } catch (error) {
+    console.error('POI deletion failed:', error);
+    throw error;
+  }
 };
