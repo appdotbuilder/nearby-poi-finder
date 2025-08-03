@@ -2,50 +2,90 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { resetDB, createDB } from '../helpers';
 import { db } from '../db';
-import { pointsOfInterestTable } from '../db/schema';
+import { poisTable } from '../db/schema';
 import { type CreatePOIInput } from '../schema';
 import { getAllPOIs } from '../handlers/get_all_pois';
 
-// Test data for POIs
+// Test POIs with at least 2 examples per category
 const testPOIs: CreatePOIInput[] = [
+  // Layanan (Services) - 2 examples
   {
-    name: 'Rumah Sakit Umum',
-    description: 'Layanan kesehatan 24 jam',
+    name: 'Bank BCA Sudirman',
+    description: 'Bank dan layanan ATM 24 jam',
     category: 'Layanan',
     latitude: -6.2088,
     longitude: 106.8456,
-    address: 'Jl. Kesehatan No. 123',
-    phone: '+62-21-1234567',
-    website: null,
-    rating: 4.5,
-    image_url: null,
-    is_active: true
+    address: 'Jl. Jend. Sudirman No.1, Jakarta',
+    phone: '+62-21-2358-8000'
   },
   {
-    name: 'Warung Nasi Padang',
-    description: 'Masakan Padang autentik',
+    name: 'Rumah Sakit Siloam',
+    description: 'Rumah sakit umum dengan layanan 24 jam',
+    category: 'Layanan',
+    latitude: -6.2100,
+    longitude: 106.8470,
+    address: 'Jl. Garnisun Dalam No.8, Jakarta',
+    phone: '+62-21-7919-2001'
+  },
+  
+  // Kuliner (Food & Beverage) - 2 examples
+  {
+    name: 'Warung Padang Sederhana',
+    description: 'Masakan Padang autentik dengan cita rasa tradisional',
     category: 'Kuliner',
     latitude: -6.2095,
-    longitude: 106.8440,
-    address: 'Jl. Raya Kuliner No. 45',
-    phone: '+62-21-7654321',
-    website: null,
-    rating: 4.2,
-    image_url: null,
-    is_active: true
+    longitude: 106.8445,
+    address: 'Jl. Kebon Sirih No.15, Jakarta',
+    phone: '+62-21-3904-5678'
   },
   {
-    name: 'Minimarket Tutup',
-    description: 'Toko yang sudah tutup',
+    name: 'Starbucks Coffee',
+    description: 'Kedai kopi internasional dengan wifi gratis',
+    category: 'Kuliner',
+    latitude: -6.2080,
+    longitude: 106.8480,
+    address: 'Plaza Indonesia, Lt. Ground, Jakarta',
+    phone: '+62-21-2992-3456'
+  },
+  
+  // Belanja (Shopping) - 2 examples
+  {
+    name: 'Plaza Indonesia',
+    description: 'Pusat perbelanjaan mewah dengan brand internasional',
     category: 'Belanja',
-    latitude: -6.2085,
-    longitude: 106.8475,
-    address: 'Jl. Belanja Raya No. 78',
-    phone: null,
-    website: null,
-    rating: null,
-    image_url: null,
-    is_active: false // This POI is inactive
+    latitude: -6.2082,
+    longitude: 106.8485,
+    address: 'Jl. M.H. Thamrin Kav. 28-30, Jakarta',
+    phone: '+62-21-310-7081'
+  },
+  {
+    name: 'Grand Indonesia Mall',
+    description: 'Mall besar dengan berbagai tenant dan food court',
+    category: 'Belanja',
+    latitude: -6.2075,
+    longitude: 106.8465,
+    address: 'Jl. M.H. Thamrin No.1, Jakarta',
+    phone: '+62-21-2358-7000'
+  },
+  
+  // Wisata (Tourism) - 2 examples
+  {
+    name: 'Monumen Nasional (Monas)',
+    description: 'Monumen bersejarah simbol kemerdekaan Indonesia',
+    category: 'Wisata',
+    latitude: -6.1754,
+    longitude: 106.8272,
+    address: 'Gambir, Jakarta Pusat',
+    phone: '+62-21-382-2255'
+  },
+  {
+    name: 'Museum Bank Indonesia',
+    description: 'Museum yang menampilkan sejarah perbankan Indonesia',
+    category: 'Wisata',
+    latitude: -6.1680,
+    longitude: 106.8310,
+    address: 'Jl. Pintu Besar Utara No.3, Jakarta',
+    phone: '+62-21-2600-1200'
   }
 ];
 
@@ -53,105 +93,37 @@ describe('getAllPOIs', () => {
   beforeEach(createDB);
   afterEach(resetDB);
 
-  it('should return all active POIs', async () => {
-    // Insert test data - keep numeric fields as numbers
-    await db.insert(pointsOfInterestTable)
+  it('should return empty array when no POIs exist', async () => {
+    const result = await getAllPOIs();
+    expect(result).toEqual([]);
+  });
+
+  it('should return all POIs from database', async () => {
+    // Insert test POIs
+    await db.insert(poisTable)
       .values(testPOIs)
       .execute();
 
     const result = await getAllPOIs();
 
-    // Should only return active POIs (2 out of 3)
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(8);
     
-    // Verify all returned POIs are active
-    result.forEach(poi => {
-      expect(poi.is_active).toBe(true);
-    });
+    // Verify all categories are represented with at least 2 examples each
+    const layananPOIs = result.filter(poi => poi.category === 'Layanan');
+    const kulinerPOIs = result.filter(poi => poi.category === 'Kuliner');
+    const belanjaPOIs = result.filter(poi => poi.category === 'Belanja');
+    const wisataPOIs = result.filter(poi => poi.category === 'Wisata');
 
-    // Check specific POIs
-    const hospital = result.find(poi => poi.name === 'Rumah Sakit Umum');
-    expect(hospital).toBeDefined();
-    expect(hospital!.category).toBe('Layanan');
-    expect(typeof hospital!.latitude).toBe('number');
-    expect(typeof hospital!.longitude).toBe('number');
-    expect(typeof hospital!.rating).toBe('number');
-    expect(hospital!.rating).toBe(4.5);
-
-    const restaurant = result.find(poi => poi.name === 'Warung Nasi Padang');
-    expect(restaurant).toBeDefined();
-    expect(restaurant!.category).toBe('Kuliner');
-
-    // Inactive POI should not be returned
-    const inactivePOI = result.find(poi => poi.name === 'Minimarket Tutup');
-    expect(inactivePOI).toBeUndefined();
+    expect(layananPOIs).toHaveLength(2);
+    expect(kulinerPOIs).toHaveLength(2);
+    expect(belanjaPOIs).toHaveLength(2);
+    expect(wisataPOIs).toHaveLength(2);
   });
 
-  it('should return empty array when no active POIs exist', async () => {
-    // Insert only inactive POI
-    await db.insert(pointsOfInterestTable)
-      .values([{
-        name: 'Inactive POI',
-        description: 'This is inactive',
-        category: 'Wisata',
-        latitude: -6.2088,
-        longitude: 106.8456,
-        address: 'Some address',
-        phone: null,
-        website: null,
-        rating: null,
-        image_url: null,
-        is_active: false
-      }])
-      .execute();
-
-    const result = await getAllPOIs();
-
-    expect(result).toHaveLength(0);
-  });
-
-  it('should handle POIs with null numeric values correctly', async () => {
-    // Insert POI with null rating
-    await db.insert(pointsOfInterestTable)
-      .values([{
-        name: 'POI with null rating',
-        description: 'Testing null values',
-        category: 'Belanja',
-        latitude: -6.2088,
-        longitude: 106.8456,
-        address: 'Test address',
-        phone: null,
-        website: null,
-        rating: null,
-        image_url: null,
-        is_active: true
-      }])
-      .execute();
-
-    const result = await getAllPOIs();
-
-    expect(result).toHaveLength(1);
-    expect(result[0].rating).toBeNull();
-    expect(typeof result[0].latitude).toBe('number');
-    expect(typeof result[0].longitude).toBe('number');
-  });
-
-  it('should return POIs with correct data types', async () => {
-    // Insert test POI
-    await db.insert(pointsOfInterestTable)
-      .values([{
-        name: 'Type Test POI',
-        description: 'Testing data types',
-        category: 'Wisata',
-        latitude: -6.2088,
-        longitude: 106.8456,
-        address: 'Test address',
-        phone: '+62-21-1234567',
-        website: 'https://example.com',
-        rating: 4.7,
-        image_url: 'https://example.com/image.jpg',
-        is_active: true
-      }])
+  it('should return POIs with correct field types', async () => {
+    // Insert one POI for testing
+    await db.insert(poisTable)
+      .values([testPOIs[0]])
       .execute();
 
     const result = await getAllPOIs();
@@ -159,20 +131,45 @@ describe('getAllPOIs', () => {
     expect(result).toHaveLength(1);
     const poi = result[0];
 
-    // Verify data types
+    // Verify field types
     expect(typeof poi.id).toBe('number');
     expect(typeof poi.name).toBe('string');
-    expect(typeof poi.description).toBe('string');
     expect(typeof poi.category).toBe('string');
     expect(typeof poi.latitude).toBe('number');
     expect(typeof poi.longitude).toBe('number');
-    expect(typeof poi.address).toBe('string');
-    expect(typeof poi.phone).toBe('string');
-    expect(typeof poi.website).toBe('string');
-    expect(typeof poi.rating).toBe('number');
-    expect(typeof poi.image_url).toBe('string');
-    expect(typeof poi.is_active).toBe('boolean');
     expect(poi.created_at).toBeInstanceOf(Date);
-    expect(poi.updated_at).toBeInstanceOf(Date);
+
+    // Verify specific values
+    expect(poi.name).toEqual('Bank BCA Sudirman');
+    expect(poi.category).toEqual('Layanan');
+    expect(poi.latitude).toEqual(-6.2088);
+    expect(poi.longitude).toEqual(106.8456);
+  });
+
+  it('should handle nullable fields correctly', async () => {
+    // Insert POI with null values
+    const poiWithNulls: CreatePOIInput = {
+      name: 'Test POI',
+      description: null,
+      category: 'Layanan',
+      latitude: -6.2088,
+      longitude: 106.8456,
+      address: null,
+      phone: null
+    };
+
+    await db.insert(poisTable)
+      .values([poiWithNulls])
+      .execute();
+
+    const result = await getAllPOIs();
+
+    expect(result).toHaveLength(1);
+    const poi = result[0];
+
+    expect(poi.description).toBeNull();
+    expect(poi.address).toBeNull();
+    expect(poi.phone).toBeNull();
+    expect(poi.name).toEqual('Test POI');
   });
 });

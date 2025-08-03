@@ -1,26 +1,21 @@
 
 import { db } from '../db';
-import { pointsOfInterestTable } from '../db/schema';
-import { type PointOfInterest } from '../schema';
-import { eq } from 'drizzle-orm';
+import { poisTable } from '../db/schema';
+import { type POI } from '../schema';
 
-export const getAllPOIs = async (): Promise<PointOfInterest[]> => {
+export const getAllPOIs = async (): Promise<POI[]> => {
   try {
-    // Fetch all active points of interest from the database
     const results = await db.select()
-      .from(pointsOfInterestTable)
-      .where(eq(pointsOfInterestTable.is_active, true))
+      .from(poisTable)
       .execute();
 
-    // Convert numeric fields back to numbers
+    // Convert real (float) fields - latitude and longitude are already numbers from real type
     return results.map(poi => ({
       ...poi,
-      latitude: parseFloat(poi.latitude?.toString() || '0'),
-      longitude: parseFloat(poi.longitude?.toString() || '0'),
-      rating: poi.rating ? parseFloat(poi.rating.toString()) : null
+      // No conversion needed for real type fields - they're already numbers
     }));
   } catch (error) {
-    console.error('Failed to fetch POIs:', error);
+    console.error('Get all POIs failed:', error);
     throw error;
   }
 };

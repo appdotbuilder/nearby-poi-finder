@@ -4,13 +4,11 @@ import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import 'dotenv/config';
 import cors from 'cors';
 import superjson from 'superjson';
-import { z } from 'zod';
 
-// Import schemas
+// Import schema types
 import { 
   createPOIInputSchema, 
-  updatePOIInputSchema, 
-  nearbyPOIInputSchema, 
+  getNearbyPOIsInputSchema, 
   getPOIsByCategoryInputSchema 
 } from './schema';
 
@@ -19,8 +17,6 @@ import { createPOI } from './handlers/create_poi';
 import { getNearbyPOIs } from './handlers/get_nearby_pois';
 import { getPOIsByCategory } from './handlers/get_pois_by_category';
 import { getAllPOIs } from './handlers/get_all_pois';
-import { updatePOI } from './handlers/update_poi';
-import { deletePOI } from './handlers/delete_poi';
 
 const t = initTRPC.create({
   transformer: superjson,
@@ -30,39 +26,28 @@ const publicProcedure = t.procedure;
 const router = t.router;
 
 const appRouter = router({
-  // Health check endpoint
   healthcheck: publicProcedure.query(() => {
     return { status: 'ok', timestamp: new Date().toISOString() };
   }),
-
-  // Create a new point of interest
+  
+  // Create a new POI
   createPOI: publicProcedure
     .input(createPOIInputSchema)
     .mutation(({ input }) => createPOI(input)),
-
-  // Get nearby points of interest based on user location
+  
+  // Get nearby POIs with optional filtering by category and radius
   getNearbyPOIs: publicProcedure
-    .input(nearbyPOIInputSchema)
+    .input(getNearbyPOIsInputSchema)
     .query(({ input }) => getNearbyPOIs(input)),
-
-  // Get points of interest by category
+  
+  // Get all POIs in a specific category
   getPOIsByCategory: publicProcedure
     .input(getPOIsByCategoryInputSchema)
     .query(({ input }) => getPOIsByCategory(input)),
-
-  // Get all points of interest
+  
+  // Get all POIs regardless of category
   getAllPOIs: publicProcedure
     .query(() => getAllPOIs()),
-
-  // Update an existing point of interest
-  updatePOI: publicProcedure
-    .input(updatePOIInputSchema)
-    .mutation(({ input }) => updatePOI(input)),
-
-  // Delete a point of interest
-  deletePOI: publicProcedure
-    .input(z.object({ id: z.number() }))
-    .mutation(({ input }) => deletePOI(input.id)),
 });
 
 export type AppRouter = typeof appRouter;

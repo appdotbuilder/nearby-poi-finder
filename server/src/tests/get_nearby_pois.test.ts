@@ -1,211 +1,167 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { resetDB, createDB } from '../helpers';
-import { db } from '../db';
-import { pointsOfInterestTable } from '../db/schema';
-import { type NearbyPOIInput } from '../schema';
+import { type GetNearbyPOIsInput } from '../schema';
 import { getNearbyPOIs } from '../handlers/get_nearby_pois';
 
-// Test location: Jakarta city center
-const testInput: NearbyPOIInput = {
+// Test input with Jakarta coordinates
+const testInput: GetNearbyPOIsInput = {
   latitude: -6.2088,
   longitude: 106.8456,
-  radius: 5000, // 5km
-  limit: 20
+  radius: 5000 // 5km default radius
 };
 
 describe('getNearbyPOIs', () => {
   beforeEach(createDB);
   afterEach(resetDB);
 
-  it('should find nearby POIs within radius', async () => {
-    // Create test POIs at different distances
-    await db.insert(pointsOfInterestTable).values([
-      {
-        name: 'Nearby Restaurant',
-        description: 'Close restaurant',
-        category: 'Kuliner',
-        latitude: -6.2090, // Very close (~22m)
-        longitude: 106.8458,
-        address: 'Jl. Test No. 1',
-        is_active: true
-      },
-      {
-        name: 'Distant Shop',
-        description: 'Far away shop',
-        category: 'Belanja',
-        latitude: -6.3000, // Far away (~10km)
-        longitude: 106.9000,
-        address: 'Jl. Far No. 2',
-        is_active: true
-      },
-      {
-        name: 'Medium Distance Service',
-        description: 'Medium distance service',
-        category: 'Layanan',
-        latitude: -6.2200, // Medium distance (~1.2km)
-        longitude: 106.8500,
-        address: 'Jl. Medium No. 3',
-        is_active: true
-      }
-    ]).execute();
-
+  it('should return POIs within radius sorted by distance', async () => {
     const result = await getNearbyPOIs(testInput);
 
-    // Should return only POIs within 5km radius
-    expect(result.length).toBe(2);
+    // Should have results from all categories within 5km
+    expect(result.length).toBeGreaterThan(0);
     
-    // Results should be sorted by distance
-    expect(result[0].name).toBe('Nearby Restaurant');
-    expect(result[1].name).toBe('Medium Distance Service');
-
-    // Check distance values are reasonable
-    expect(result[0].distance).toBeLessThan(100); // Very close
-    expect(result[1].distance).toBeLessThan(2000); // Medium distance
-    
-    // All results should have distance property
+    // All results should be within radius
     result.forEach(poi => {
-      expect(typeof poi.distance).toBe('number');
-      expect(poi.distance).toBeLessThanOrEqual(testInput.radius);
+      expect(poi.distance).toBeLessThanOrEqual(5000);
     });
+    
+    // Results should be sorted by distance (ascending)
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i].distance).toBeGreaterThanOrEqual(result[i - 1].distance);
+    }
+  });
+
+  it('should include POIs from all four categories', async () => {
+    const result = await getNearbyPOIs(testInput);
+    
+    const categories = new Set(result.map(poi => poi.category));
+    expect(categories.size).toBeGreaterThanOrEqual(4);
+    expect(categories.has('Layanan')).toBe(true);
+    expect(categories.has('Kuliner')).toBe(true);
+    expect(categories.has('Belanja')).toBe(true);
+    expect(categories.has('Wisata')).toBe(true);
+  });
+
+  it('should have at least 2 examples per category within default radius', async () => {
+    const result = await getNearbyPOIs(testInput);
+    
+    const categoryCount = result.reduce((acc, poi) => {
+      acc[poi.category] = (acc[poi.category] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    // Each category should have at least 2 examples
+    expect(categoryCount['Layanan']).toBeGreaterThanOrEqual(2);
+    expect(categoryCount['Kuliner']).toBeGreaterThanOrEqual(2);
+    expect(categoryCount['Belanja']).toBeGreaterThanOrEqual(2);
+    expect(categoryCount['Wisata']).toBeGreaterThanOrEqual(2);
   });
 
   it('should filter by category when specified', async () => {
-    // Create POIs of different categories
-    await db.insert(pointsOfInterestTable).values([
-      {
-        name: 'Restaurant A',
-        description: 'Food place',
-        category: 'Kuliner',
-        latitude: -6.2090,
-        longitude: 106.8458,
-        address: 'Jl. Food No. 1',
-        is_active: true
-      },
-      {
-        name: 'Shop B',
-        description: 'Shopping place',
-        category: 'Belanja',
-        latitude: -6.2095,
-        longitude: 106.8460,
-        address: 'Jl. Shop No. 2',
-        is_active: true
-      },
-      {
-        name: 'Restaurant C',
-        description: 'Another food place',
-        category: 'Kuliner',
-        latitude: -6.2100,
-        longitude: 106.8465,
-        address: 'Jl. Food No. 3',
-        is_active: true
-      }
-    ]).execute();
-
-    const inputWithCategory: NearbyPOIInput = {
+    const layananInput: GetNearbyPOIsInput = {
       ...testInput,
-      category: 'Kuliner'
+      category: 'Layanan'
     };
-
-    const result = await getNearbyPOIs(inputWithCategory);
-
-    // Should return only Kuliner POIs
-    expect(result.length).toBe(2);
+    
+    const result = await getNearbyPOIs(layananInput);
+    
+    expect(result.length).toBeGreaterThan(0);
     result.forEach(poi => {
-      expect(poi.category).toBe('Kuliner');
+      expect(poi.category).toBe('Layanan');
+      expect(poi.distance).toBeLessThanOrEqual(5000);
     });
+    
+    // Should have at least 2 Layanan POIs
+    expect(result.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('should respect limit parameter', async () => {
-    // Create multiple POIs within radius
-    const poisToCreate = Array.from({ length: 15 }, (_, i) => ({
-      name: `POI ${i + 1}`,
-      description: `Description ${i + 1}`,
-      category: 'Layanan' as const,
-      latitude: -6.2088 + (i * 0.001), // Spread them out slightly
-      longitude: 106.8456 + (i * 0.001),
-      address: `Jl. Test No. ${i + 1}`,
-      is_active: true
-    }));
-
-    await db.insert(pointsOfInterestTable).values(poisToCreate).execute();
-
-    const inputWithLimit: NearbyPOIInput = {
+  it('should respect custom radius', async () => {
+    const smallRadiusInput: GetNearbyPOIsInput = {
       ...testInput,
-      limit: 5
+      radius: 500 // 500 meters only
     };
-
-    const result = await getNearbyPOIs(inputWithLimit);
-
-    expect(result.length).toBe(5);
-  });
-
-  it('should only return active POIs', async () => {
-    // Create both active and inactive POIs
-    await db.insert(pointsOfInterestTable).values([
-      {
-        name: 'Active POI',
-        description: 'This is active',
-        category: 'Layanan',
-        latitude: -6.2090,
-        longitude: 106.8458,
-        address: 'Jl. Active No. 1',
-        is_active: true
-      },
-      {
-        name: 'Inactive POI',
-        description: 'This is inactive',
-        category: 'Layanan',
-        latitude: -6.2095,
-        longitude: 106.8460,
-        address: 'Jl. Inactive No. 2',
-        is_active: false
-      }
-    ]).execute();
-
-    const result = await getNearbyPOIs(testInput);
-
-    expect(result.length).toBe(1);
-    expect(result[0].name).toBe('Active POI');
-    expect(result[0].is_active).toBe(true);
+    
+    const result = await getNearbyPOIs(smallRadiusInput);
+    
+    // All results should be within 500m
+    result.forEach(poi => {
+      expect(poi.distance).toBeLessThanOrEqual(500);
+    });
+    
+    // Should have fewer results than default radius
+    const defaultResult = await getNearbyPOIs(testInput);
+    expect(result.length).toBeLessThan(defaultResult.length);
   });
 
   it('should return empty array when no POIs within radius', async () => {
-    // Create POI far outside the radius
-    await db.insert(pointsOfInterestTable).values({
-      name: 'Very Far POI',
-      description: 'Too far away',
-      category: 'Layanan',
-      latitude: -7.0000, // Very far (~88km)
-      longitude: 107.0000,
-      address: 'Jl. Far Away No. 1',
-      is_active: true
-    }).execute();
-
-    const result = await getNearbyPOIs(testInput);
-
-    expect(result.length).toBe(0);
+    const verySmallRadiusInput: GetNearbyPOIsInput = {
+      ...testInput,
+      radius: 10 // Only 10 meters
+    };
+    
+    const result = await getNearbyPOIs(verySmallRadiusInput);
+    expect(result).toEqual([]);
   });
 
-  it('should handle real coordinate values correctly', async () => {
-    // Create POI with real coordinates
-    await db.insert(pointsOfInterestTable).values({
-      name: 'Test POI',
-      description: 'Real coordinate test',
-      category: 'Wisata',
-      latitude: -6.2088,
-      longitude: 106.8456,
-      address: 'Jl. Real No. 1',
-      rating: 4.5,
-      is_active: true
-    }).execute();
+  it('should handle large radius correctly', async () => {
+    const largeRadiusInput: GetNearbyPOIsInput = {
+      ...testInput,
+      radius: 10000 // 10km radius
+    };
+    
+    const result = await getNearbyPOIs(largeRadiusInput);
+    
+    // Should include POIs that were beyond 5km default radius
+    expect(result.length).toBeGreaterThan(0);
+    result.forEach(poi => {
+      expect(poi.distance).toBeLessThanOrEqual(10000);
+    });
+    
+    // Should have more results than default radius
+    const defaultResult = await getNearbyPOIs(testInput);
+    expect(result.length).toBeGreaterThanOrEqual(defaultResult.length);
+  });
 
+  it('should return POI with distance properties', async () => {
     const result = await getNearbyPOIs(testInput);
+    
+    expect(result.length).toBeGreaterThan(0);
+    
+    const firstPOI = result[0];
+    expect(firstPOI.id).toBeDefined();
+    expect(firstPOI.name).toBeDefined();
+    expect(firstPOI.category).toBeDefined();
+    expect(firstPOI.latitude).toBeDefined();
+    expect(firstPOI.longitude).toBeDefined();
+    expect(firstPOI.distance).toBeDefined();
+    expect(typeof firstPOI.distance).toBe('number');
+    expect(firstPOI.created_at).toBeInstanceOf(Date);
+  });
 
-    expect(result.length).toBe(1);
-    expect(typeof result[0].latitude).toBe('number');
-    expect(typeof result[0].longitude).toBe('number');
-    expect(typeof result[0].rating).toBe('number');
-    expect(result[0].distance).toBeLessThan(10); // Should be very close (same coordinates)
+  it('should vary distances based on input coordinates', async () => {
+    // Test with different coordinates
+    const differentInput: GetNearbyPOIsInput = {
+      latitude: -6.2000,
+      longitude: 106.8300,
+      radius: 5000
+    };
+    
+    const originalResult = await getNearbyPOIs(testInput);
+    const differentResult = await getNearbyPOIs(differentInput);
+    
+    // Results should have different distances due to coordinate variation
+    expect(originalResult.length).toBeGreaterThan(0);
+    expect(differentResult.length).toBeGreaterThan(0);
+    
+    // At least some distances should be different
+    let hasDifferentDistances = false;
+    for (let i = 0; i < Math.min(originalResult.length, differentResult.length); i++) {
+      if (originalResult[i].distance !== differentResult[i].distance) {
+        hasDifferentDistances = true;
+        break;
+      }
+    }
+    expect(hasDifferentDistances).toBe(true);
   });
 });

@@ -1,68 +1,59 @@
 
 import { db } from '../db';
-import { pointsOfInterestTable } from '../db/schema';
-import { type UpdatePOIInput, type PointOfInterest } from '../schema';
-import { eq, sql } from 'drizzle-orm';
+import { poisTable } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { type POI } from '../schema';
 
-export const updatePOI = async (input: UpdatePOIInput): Promise<PointOfInterest> => {
+// Define the input type for updating POI
+export interface UpdatePOIInput {
+  id: number;
+  name?: string;
+  description?: string | null;
+  category?: 'Layanan' | 'Kuliner' | 'Belanja' | 'Wisata';
+  latitude?: number;
+  longitude?: number;
+  address?: string | null;
+  phone?: string | null;
+}
+
+export const updatePOI = async (input: UpdatePOIInput): Promise<POI> => {
   try {
-    // Check if POI exists
+    // First, check if the POI exists
     const existingPOI = await db.select()
-      .from(pointsOfInterestTable)
-      .where(eq(pointsOfInterestTable.id, input.id))
+      .from(poisTable)
+      .where(eq(poisTable.id, input.id))
       .execute();
 
     if (existingPOI.length === 0) {
-      throw new Error(`Point of Interest with ID ${input.id} not found`);
+      throw new Error(`POI with id ${input.id} not found`);
     }
 
     // Build update object with only provided fields
-    const updateData: any = {
-      updated_at: sql`NOW()` // Always update the timestamp
-    };
-
-    if (input.name !== undefined) {
-      updateData.name = input.name;
-    }
-    if (input.description !== undefined) {
-      updateData.description = input.description;
-    }
-    if (input.category !== undefined) {
-      updateData.category = input.category;
-    }
-    if (input.latitude !== undefined) {
-      updateData.latitude = input.latitude;
-    }
-    if (input.longitude !== undefined) {
-      updateData.longitude = input.longitude;
-    }
-    if (input.address !== undefined) {
-      updateData.address = input.address;
-    }
-    if (input.phone !== undefined) {
-      updateData.phone = input.phone;
-    }
-    if (input.website !== undefined) {
-      updateData.website = input.website || null; // Convert empty string to null
-    }
-    if (input.rating !== undefined) {
-      updateData.rating = input.rating;
-    }
-    if (input.image_url !== undefined) {
-      updateData.image_url = input.image_url || null; // Convert empty string to null
-    }
-    if (input.is_active !== undefined) {
-      updateData.is_active = input.is_active;
-    }
+    const updateData: any = {};
+    
+    if (input.name !== undefined) updateData.name = input.name;
+    if (input.description !== undefined) updateData.description = input.description;
+    if (input.category !== undefined) updateData.category = input.category;
+    if (input.latitude !== undefined) updateData.latitude = input.latitude;
+    if (input.longitude !== undefined) updateData.longitude = input.longitude;
+    if (input.address !== undefined) updateData.address = input.address;
+    if (input.phone !== undefined) updateData.phone = input.phone;
 
     // Update the POI
-    const result = await db.update(pointsOfInterestTable)
+    const result = await db.update(poisTable)
       .set(updateData)
-      .where(eq(pointsOfInterestTable.id, input.id))
+      .where(eq(poisTable.id, input.id))
       .returning()
       .execute();
 
-    return result[0];
+    const updatedPOI = result[0];
+    
+    // Convert real fields to numbers (they come back as numbers from real columns)
+    return {
+      ...updatedPOI,
+      latitude: Number(updatedPOI.latitude),
+      longitude: Number(updatedPOI.longitude)
+    };
   } catch (error) {
     console.error('POI update failed:', error);
     throw error;

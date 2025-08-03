@@ -2,12 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { resetDB, createDB } from '../helpers';
 import { db } from '../db';
-import { pointsOfInterestTable } from '../db/schema';
+import { poisTable } from '../db/schema';
 import { type CreatePOIInput } from '../schema';
 import { createPOI } from '../handlers/create_poi';
 import { eq } from 'drizzle-orm';
 
-// Test input with all required fields
+// Test input for a POI
 const testInput: CreatePOIInput = {
   name: 'Test Restaurant',
   description: 'A great place to eat',
@@ -15,26 +15,7 @@ const testInput: CreatePOIInput = {
   latitude: -6.2088,
   longitude: 106.8456,
   address: 'Jl. Test No. 123, Jakarta',
-  phone: '+62-21-12345678',
-  website: 'https://test-restaurant.com',
-  rating: 4.5,
-  image_url: 'https://example.com/image.jpg',
-  is_active: true
-};
-
-// Minimal test input with only required fields
-const minimalInput: CreatePOIInput = {
-  name: 'Minimal POI',
-  description: null,
-  category: 'Layanan',
-  latitude: -6.2088,
-  longitude: 106.8456,
-  address: 'Jl. Minimal No. 1',
-  phone: null,
-  website: null,
-  rating: null,
-  image_url: null,
-  is_active: true
+  phone: '+62-21-12345678'
 };
 
 describe('createPOI', () => {
@@ -52,94 +33,91 @@ describe('createPOI', () => {
     expect(result.longitude).toEqual(106.8456);
     expect(result.address).toEqual('Jl. Test No. 123, Jakarta');
     expect(result.phone).toEqual('+62-21-12345678');
-    expect(result.website).toEqual('https://test-restaurant.com');
-    expect(result.rating).toEqual(4.5);
-    expect(result.image_url).toEqual('https://example.com/image.jpg');
-    expect(result.is_active).toEqual(true);
     expect(result.id).toBeDefined();
     expect(result.created_at).toBeInstanceOf(Date);
-    expect(result.updated_at).toBeInstanceOf(Date);
-  });
-
-  it('should create a POI with minimal fields', async () => {
-    const result = await createPOI(minimalInput);
-
-    expect(result.name).toEqual('Minimal POI');
-    expect(result.description).toBeNull();
-    expect(result.category).toEqual('Layanan');
-    expect(result.latitude).toEqual(-6.2088);
-    expect(result.longitude).toEqual(106.8456);
-    expect(result.address).toEqual('Jl. Minimal No. 1');
-    expect(result.phone).toBeNull();
-    expect(result.website).toBeNull();
-    expect(result.rating).toBeNull();
-    expect(result.image_url).toBeNull();
-    expect(result.is_active).toEqual(true);
-    expect(result.id).toBeDefined();
-    expect(result.created_at).toBeInstanceOf(Date);
-    expect(result.updated_at).toBeInstanceOf(Date);
   });
 
   it('should save POI to database', async () => {
     const result = await createPOI(testInput);
 
-    // Query using proper drizzle syntax
+    // Query the database to verify data was saved
     const pois = await db.select()
-      .from(pointsOfInterestTable)
-      .where(eq(pointsOfInterestTable.id, result.id))
+      .from(poisTable)
+      .where(eq(poisTable.id, result.id))
       .execute();
 
     expect(pois).toHaveLength(1);
     expect(pois[0].name).toEqual('Test Restaurant');
     expect(pois[0].description).toEqual('A great place to eat');
     expect(pois[0].category).toEqual('Kuliner');
-    expect(pois[0].latitude).toEqual(-6.2088);
-    expect(pois[0].longitude).toEqual(106.8456);
+    expect(Number(pois[0].latitude)).toEqual(-6.2088);
+    expect(Number(pois[0].longitude)).toEqual(106.8456);
     expect(pois[0].address).toEqual('Jl. Test No. 123, Jakarta');
     expect(pois[0].phone).toEqual('+62-21-12345678');
-    expect(pois[0].website).toEqual('https://test-restaurant.com');
-    expect(pois[0].rating).toEqual(4.5);
-    expect(pois[0].image_url).toEqual('https://example.com/image.jpg');
-    expect(pois[0].is_active).toEqual(true);
     expect(pois[0].created_at).toBeInstanceOf(Date);
-    expect(pois[0].updated_at).toBeInstanceOf(Date);
   });
 
-  it('should handle empty string URLs as null', async () => {
-    const inputWithEmptyUrls: CreatePOIInput = {
-      ...testInput,
-      website: '',
-      image_url: ''
+  it('should create POI with nullable fields as null', async () => {
+    const minimalInput: CreatePOIInput = {
+      name: 'Minimal POI',
+      description: null,
+      category: 'Layanan',
+      latitude: -6.1751,
+      longitude: 106.8650,
+      address: null,
+      phone: null
     };
 
-    const result = await createPOI(inputWithEmptyUrls);
+    const result = await createPOI(minimalInput);
 
-    expect(result.website).toBeNull();
-    expect(result.image_url).toBeNull();
-
-    // Verify in database
-    const pois = await db.select()
-      .from(pointsOfInterestTable)
-      .where(eq(pointsOfInterestTable.id, result.id))
-      .execute();
-
-    expect(pois[0].website).toBeNull();
-    expect(pois[0].image_url).toBeNull();
+    expect(result.name).toEqual('Minimal POI');
+    expect(result.description).toBeNull();
+    expect(result.category).toEqual('Layanan');
+    expect(result.latitude).toEqual(-6.1751);
+    expect(result.longitude).toEqual(106.8650);
+    expect(result.address).toBeNull();
+    expect(result.phone).toBeNull();
+    expect(result.id).toBeDefined();
+    expect(result.created_at).toBeInstanceOf(Date);
   });
 
-  it('should create POIs with different categories', async () => {
+  it('should handle different POI categories', async () => {
     const categories = ['Layanan', 'Kuliner', 'Belanja', 'Wisata'] as const;
     
     for (const category of categories) {
-      const input: CreatePOIInput = {
-        ...testInput,
+      const categoryInput: CreatePOIInput = {
         name: `Test ${category}`,
-        category
+        description: `A test ${category} POI`,
+        category: category,
+        latitude: -6.2088,
+        longitude: 106.8456,
+        address: 'Test Address',
+        phone: '+62-21-12345678'
       };
 
-      const result = await createPOI(input);
+      const result = await createPOI(categoryInput);
       expect(result.category).toEqual(category);
       expect(result.name).toEqual(`Test ${category}`);
     }
+  });
+
+  it('should handle coordinate precision correctly', async () => {
+    const preciseInput: CreatePOIInput = {
+      name: 'Precise Location',
+      description: 'A POI with precise coordinates',
+      category: 'Wisata',
+      latitude: -6.208763451,
+      longitude: 106.845599123,
+      address: 'Precise Address',
+      phone: '+62-21-98765432'
+    };
+
+    const result = await createPOI(preciseInput);
+
+    // Verify coordinates are preserved with reasonable precision
+    expect(typeof result.latitude).toBe('number');
+    expect(typeof result.longitude).toBe('number');
+    expect(Math.abs(result.latitude - preciseInput.latitude)).toBeLessThan(0.0001);
+    expect(Math.abs(result.longitude - preciseInput.longitude)).toBeLessThan(0.0001);
   });
 });

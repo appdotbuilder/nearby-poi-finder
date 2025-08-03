@@ -1,12 +1,12 @@
 
 import { db } from '../db';
-import { pointsOfInterestTable } from '../db/schema';
-import { type CreatePOIInput, type PointOfInterest } from '../schema';
+import { poisTable } from '../db/schema';
+import { type CreatePOIInput, type POI } from '../schema';
 
-export const createPOI = async (input: CreatePOIInput): Promise<PointOfInterest> => {
+export async function createPOI(input: CreatePOIInput): Promise<POI> {
   try {
     // Insert POI record
-    const result = await db.insert(pointsOfInterestTable)
+    const result = await db.insert(poisTable)
       .values({
         name: input.name,
         description: input.description,
@@ -14,18 +14,20 @@ export const createPOI = async (input: CreatePOIInput): Promise<PointOfInterest>
         latitude: input.latitude,
         longitude: input.longitude,
         address: input.address,
-        phone: input.phone,
-        website: input.website || null,
-        rating: input.rating,
-        image_url: input.image_url || null,
-        is_active: input.is_active
+        phone: input.phone
       })
       .returning()
       .execute();
 
-    return result[0];
+    const poi = result[0];
+    return {
+      ...poi,
+      // Ensure proper type conversion for coordinates (real columns)
+      latitude: Number(poi.latitude),
+      longitude: Number(poi.longitude)
+    };
   } catch (error) {
     console.error('POI creation failed:', error);
     throw error;
   }
-};
+}
